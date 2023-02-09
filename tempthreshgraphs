@@ -1,0 +1,145 @@
+## requirements for graph
+library(plotly)
+require(lubridate)
+require(tidyverse)
+library(data.table)
+
+#read data from different years
+buoydata2007.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2007.txt.gz&dir=data/historical/stdmet/")
+buoydata2008.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2008.txt.gz&dir=data/historical/stdmet/")
+buoydata2009.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2009.txt.gz&dir=data/historical/stdmet/")
+buoydata2010.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2010.txt.gz&dir=data/historical/stdmet/")
+buoydata2011.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2011.txt.gz&dir=data/historical/stdmet/")
+buoydata2012.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2012.txt.gz&dir=data/historical/stdmet/")
+buoydata2013.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2013.txt.gz&dir=data/historical/stdmet/")
+buoydata2014.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2014.txt.gz&dir=data/historical/stdmet/")
+buoydata2015.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2015.txt.gz&dir=data/historical/stdmet/")
+buoydata2016.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2016.txt.gz&dir=data/historical/stdmet/")
+buoydata2017.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2017.txt.gz&dir=data/historical/stdmet/")
+buoydata2018.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2018.txt.gz&dir=data/historical/stdmet/")
+buoydata2019.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2019.txt.gz&dir=data/historical/stdmet/")
+buoydata2020.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2020.txt.gz&dir=data/historical/stdmet/")
+buoydata2021.tbl <- read.table("https://www.ndbc.noaa.gov/view_text_file.php?filename=pslc1h2021.txt.gz&dir=data/historical/stdmet/")
+
+#merge data
+sharkprogression <- bind_rows(buoydata2007.tbl, buoydata2008.tbl, buoydata2009.tbl, buoydata2010.tbl, buoydata2011.tbl, buoydata2012.tbl, buoydata2013.tbl, buoydata2014.tbl, buoydata2015.tbl, buoydata2016.tbl, buoydata2017.tbl, buoydata2018.tbl, buoydata2019.tbl, buoydata2020.tbl)
+
+#sort out time
+
+bdata_time <- paste(sharkprogression [,1], "-",sharkprogression [,2], "-",sharkprogression [,3], " ",sharkprogression [,4], ":",sharkprogression [,5], ":", 00, sep="")
+head(bdata_time)
+bdata_time <- ymd_hms(bdata_time, tz="UTC")
+
+#pull desired environmental data
+buoy_wt <- sharkprogression [,15]
+
+#fix missing data
+buoy_wt <- replace(buoy_wt, buoy_wt==999, NA)
+buoy_wt <- replace(buoy_wt, buoy_wt==0.0, NA)
+
+#combine individual data vectors into one set
+sharkywater.df <- data.frame(bdata_time, buoy_wt)
+as_tibble(sharkywater.df)
+
+#graph it up!
+
+shark <- ggplot()+
+  ggtitle('Sea Surface Temperature near Santa Lucia Escarpment (2007-2021)' )+
+  geom_line(data= sharkywater.df, aes(x=bdata_time, y=buoy_wt), color="palevioletred2") +
+  xlab('Date')+
+  ylab('Temp (C)')
+shark
+
+ggplotly(shark)
+
+
+#now to analyze
+library(heatwaveR)
+library(dplyr)
+library(ggplot2)
+
+#making an object with Date format
+bdata_datetime <- as_date(bdata_time, tz=NULL)
+sharkywater.ddf <- data.frame(bdata_datetime, buoy_wt)
+
+#calculating threshold data for analysis
+
+heat.wave.shark <- ts2clm(sharkywater.df,
+                          x = bdata_datetime,
+                          y = buoy_wt,
+                          climatologyPeriod = c("2010-02-16"
+                                                , "2020-12-31"),
+                          robust = FALSE,
+                          maxPadLength = FALSE,
+                          windowHalfWidth = 5,
+                          pctile = 90,
+                          smoothPercentile = TRUE,
+                          smoothPercentileWidth = 31,
+                          clmOnly = FALSE,
+                          var = FALSE,
+                          roundClm = 4
+)
+
+
+
+#detecting heat waves
+sharkyevent.hw <- detect_event(heat.wave.shark, x=bdata_datetime, y=buoy_wt,
+                               seasClim = seas,
+                               threshClim = thresh,
+                               threshClim2 = NA,
+                               minDuration = 5,
+                               minDuration2 = minDuration,
+                               joinAcrossGaps = TRUE,
+                               maxGap = 2,
+                               maxGap2 = maxGap,
+                               coldSpells = FALSE,
+                               protoEvents = FALSE,
+                               categories = FALSE,
+                               roundRes = 4,)
+
+#heat wave graph to check events
+event_line(sharkyevent.hw, 
+           x = bdata_datetime, 
+           y = buoy_wt,
+           min_duration = 1, 
+           spread = 500, 
+           metric = "intensity_cumulative", 
+           start_date = , 
+           end_date = NULL, 
+           category = FALSE, 
+           x_axis_title = "Time", x_axis_text_angle = NULL, y_axis_title = "Temp (C)", y_axis_range = NULL, )
+
+##now to create a heat wave graph that expresses our own threshold value
+
+#determining if temp data exceeds a certain value
+tempthresh <- exceedance(
+  sharkywater.ddf,
+  x = bdata_datetime,
+  y = buoy_wt,
+  threshold = 18,
+  minDuration = 2,
+  maxGap = 1,
+  maxPadLength = FALSE)$threshold
+
+#detecting heat wave events based on climatology analysis and exceedance values
+sharkyevents <- detect_event(data = heat.wave.shark, x=bdata_datetime, y = buoy_wt, threshClim = thresh,
+                             threshClim2 = tempthresh$exceedance) 
+
+#zooming in to observe a specific anomaly (usually El Nino year)
+tempthreshsharkevents.ddf <- tempthresh %>%
+  slice(851127:1024459)
+
+
+#graph it up woot woot
+ggplot(data = tempthreshsharkevents.ddf, aes(x = bdata_datetime)) +
+  geom_flame(aes(y = buoy_wt, y2 = thresh, fill = "all"), show.legend = F) +
+  geom_line(aes(y = buoy_wt, colour = "temp")) +
+  geom_line(aes(y = thresh, colour = "thresh"), size = 1.0) +
+  # geom_line(aes(y = seas, colour = "seas"), size = 1.2) +
+  scale_colour_manual(name = "Line Color",
+                      values = c("temp" = "black", "thresh" =  "forestgreen")) +
+  scale_fill_manual(name = "Event Colour", values = c("all" = "salmon")) +
+  guides(colour = guide_legend(override.aes = list(fill = NA))) +
+  scale_x_date(date_labels = "%b %Y") +
+  labs(y = expression(paste("Temperature [", degree, "C]")), x = NULL) +
+  ggtitle('Temperature Anomalies at Port San Luis (2017-2018)')
